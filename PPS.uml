@@ -1,0 +1,119 @@
+@startuml
+title Payment Processing Sequence with 25% Fee Allocation
+
+participant "Admin User" as Admin
+participant "Frontend App" as Frontend
+participant "Backend API" as API
+participant "Database" as DB
+participant "Stripe API" as Stripe
+participant "Simplex API" as Simplex
+participant "TRON Network" as Tron
+participant "Atomic Wallet" as Wallet
+
+== Donation Processing ==
+
+group "1. WhatsApp Donation Extraction"
+    Admin -> Frontend: Trigger WhatsApp scan\n(provide WhatsApp number)
+    Frontend -> API: POST /api/whatsapp/scan
+    API -> DB: Create scan job record
+    API -> ExternalWhatsApp: Scan chats for donations
+    ExternalWhatsApp --> API: Return messages with amounts
+    API -> DB: Store extracted donations\nCalculate fees (25% total)
+    
+    note right of API: Fee Breakdown:\n- 10% Debt repayment\n- 10% Operational costs\n- 5% Transaction fees
+end
+
+group "2. WhyDonate Import"
+    Admin -> Frontend: Upload WhyDonate CSV
+    Frontend -> API: POST /api/whydonate/import
+    API -> DB: Parse and store payouts
+    API -> DB: Calculate EUR amounts\nApply 25% fee allocation
+    API -> DB: Auto-create campaigns if needed
+end
+
+== Batch Creation & Processing ==
+
+group "3. Manual Batch Creation"
+    Admin -> Frontend: Select donations for batch
+    Frontend -> API: POST /api/batches/create
+    API -> DB: Validate donations\nCalculate totals with fees
+    API -> DB: Create batch with status 'draft'
+    API -> Frontend: Return batch summary
+end
+
+group "4. EUR to USDT Conversion"
+    Admin -> Frontend: Click "Process Batch"
+    Frontend -> API: POST /api/batches/{id}/process
+    
+    API -> Stripe: Get EUR exchange rate
+    Stripe --> API: Return EUR to USD rate
+    
+    API -> DB: Update batch status to 'processing'\nStore exchange rate
+    
+    note right of API: Net Amount = Gross - 25% fees\nNet EUR → USDT via Simplex
+end
+
+group "5. Simplex Purchase (Manual Trigger)"
+    Admin -> Frontend: Click "Buy USDT via Simplex"
+    Frontend -> API: POST /api/batches/{id}/initiate-simplex
+    
+    API -> DB: Update status to 'awaiting_simplex'
+    API -> Frontend: Return Simplex redirect URL
+    
+    Admin -> Browser: Redirect to Simplex
+    Browser -> Simplex: Complete USDT purchase
+    Simplex --> Browser: Return success
+    Browser -> Frontend: Return to app with transaction ID
+    
+    Frontend -> API: POST /api/batches/{id}/simplex-callback
+    API -> DB: Store Simplex transaction details\nUpdate to 'sending'
+end
+
+group "6. TRON Network Transfer"
+    API -> DB: Get batch wallet details
+    API -> Tron: Send USDT to Atomic Wallet
+    
+    alt Success
+        Tron --> API: Return transaction hash
+        API -> DB: Store TX hash\nUpdate to 'completed'
+        API -> DB: Allocate fees to accounts\n(10% debt, 10% operational, 5% transaction)
+        DB --> API: Fee allocation confirmed
+        API -> Frontend: Success response
+        Frontend -> Admin: Show completion
+    else Failure
+        Tron --> API: Return error
+        API -> DB: Update to 'failed'\nLog error
+        API -> Frontend: Error response
+        Frontend -> Admin: Show error
+    end
+end
+
+group "7. Fee Distribution (Post-Transfer)"
+    API -> DB: Check fee allocations
+    DB --> API: Return allocated amounts
+    
+    loop For each fee type (3 types)
+        API -> ExternalSystem: Transfer fee to destination\n(debt account, operational account, etc.)
+        ExternalSystem --> API: Transfer confirmed
+        API -> DB: Mark fee as transferred
+    end
+    
+    API -> Frontend: Fee distribution complete
+end
+
+== Monitoring & Confirmation ==
+
+group "8. Blockchain Confirmation"
+    API -> Tron: Check transaction confirmation
+    Tron --> API: Return confirmation status
+    
+    alt Confirmed
+        API -> DB: Update blockchain transaction\nSet status to 'confirmed'
+        API -> DB: Update batch as fully completed
+        API -> Frontend: Send real-time update
+    else Pending
+        API -> DB: Schedule re-check
+    end
+end
+
+@enduml

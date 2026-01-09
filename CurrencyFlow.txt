@@ -1,0 +1,7 @@
+currency flow implementation
+
+Source Currency (various) 
+→ Convert to EUR (using Stripe rates) 
+→ Batch EUR amounts 
+→ Convert to USDT (via Simplex) 
+→ Send via TRON network

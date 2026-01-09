@@ -1,0 +1,241 @@
+D2C.uml
+
+
+@startuml
+' Database Schema for Multi-Source Donation Management System
+' Colors for clarity
+skinparam linetype ortho
+skinparam packageStyle rectangle
+skinparam class {
+    BackgroundColor<<Entity>> LightBlue
+    BackgroundColor<<Lookup>> LightGreen
+    BackgroundColor<<Audit>> LightYellow
+    BorderColor Black
+    ArrowColor Navy
+}
+
+title Donation Management System - Database Schema
+
+' ==================== CORE ENTITIES ====================
+class Campaign <<Entity>> {
+    + campaign_id: UUID (PK)
+    + campaign_name: VARCHAR(255)
+    + description: TEXT
+    + whatsapp_number: VARCHAR(20)
+    + wallet_address: VARCHAR(255) [TRON]
+    + created_by: UUID (FK > User.user_id)
+    + source_type: ENUM('whatsapp', 'whydonate', 'manual')
+    + status: ENUM('active', 'paused', 'completed')
+    + created_at: TIMESTAMP
+    + updated_at: TIMESTAMP
+    + metadata: JSONB
+}
+
+class Donation <<Entity>> {
+    + donation_id: UUID (PK)
+    + campaign_id: UUID (FK > Campaign.campaign_id)
+    + source_type: ENUM('whatsapp', 'whydonate')
+    + source_identifier: VARCHAR(255)
+    + donor_name: VARCHAR(255)
+    + donor_contact: VARCHAR(255)
+    + original_amount: DECIMAL(18,8)
+    + original_currency: CHAR(3)
+    + euro_amount: DECIMAL(18,8)
+    + conversion_rate: DECIMAL(12,6)
+    + donation_date: TIMESTAMP
+    + status: ENUM('pending', 'converted', 'sent', 'failed')
+    + created_at: TIMESTAMP
+}
+
+class CurrencyExchange <<Entity>> {
+    + exchange_id: UUID (PK)
+    + base_currency: CHAR(3)
+    + target_currency: CHAR(3)
+    + rate: DECIMAL(12,6)
+    + source: VARCHAR(50) ['stripe', 'manual']
+    + valid_from: TIMESTAMP
+    + valid_to: TIMESTAMP
+    + created_at: TIMESTAMP
+}
+
+class TransactionBatch <<Entity>> {
+    + batch_id: UUID (PK)
+    + campaign_id: UUID (FK > Campaign.campaign_id)
+    + total_euro_amount: DECIMAL(18,8)
+    + total_usdt_amount: DECIMAL(18,8)
+    + exchange_rate: DECIMAL(12,6)
+    + target_wallet: VARCHAR(255)
+    + network: VARCHAR(50) ['TRON', 'ETHEREUM', 'BSC']
+    + status: ENUM('pending', 'processing', 'completed', 'failed')
+    + initiated_by: UUID (FK > User.user_id)
+    + initiated_at: TIMESTAMP
+    + completed_at: TIMESTAMP
+    + transaction_hash: VARCHAR(255)
+    + fee_amount: DECIMAL(18,8)
+}
+
+class BlockchainTransaction <<Entity>> {
+    + transaction_id: UUID (PK)
+    + batch_id: UUID (FK > TransactionBatch.batch_id)
+    + donation_id: UUID (FK > Donation.donation_id)
+    + from_wallet: VARCHAR(255)
+    + to_wallet: VARCHAR(255)
+    + usdt_amount: DECIMAL(18,8)
+    + network_fee: DECIMAL(18,8)
+    + transaction_hash: VARCHAR(255)
+    + status: ENUM('pending', 'confirmed', 'failed')
+    + block_number: INTEGER
+    + confirmed_at: TIMESTAMP
+    + created_at: TIMESTAMP
+}
+
+' ==================== SOURCE-SPECIFIC TABLES ====================
+class WhatsAppChat <<Entity>> {
+    + chat_id: UUID (PK)
+    + whatsapp_number: VARCHAR(20)
+    + message_id: VARCHAR(255)
+    + sender: VARCHAR(255)
+    + message_text: TEXT
+    + timestamp: TIMESTAMP
+    + extracted_wallet_address: VARCHAR(255)
+    + extracted_campaign_link: VARCHAR(500)
+    + processed: BOOLEAN
+    + processing_result: TEXT
+    + created_at: TIMESTAMP
+}
+
+class WhatsAppScanJob <<Entity>> {
+    + scan_id: UUID (PK)
+    + whatsapp_number: VARCHAR(20)
+    + initiated_by: UUID (FK > User.user_id)
+    + status: ENUM('pending', 'scanning', 'completed', 'failed')
+    + messages_scanned: INTEGER
+    + wallets_found: INTEGER
+    + campaigns_created: INTEGER
+    + started_at: TIMESTAMP
+    + completed_at: TIMESTAMP
+    + error_message: TEXT
+}
+
+class WhyDonatePayout <<Entity>> {
+    + payout_id: UUID (PK)
+    + whydonate_id: VARCHAR(255)
+    + payout_date: DATE
+    + donor_name: VARCHAR(255)
+    + donor_email: VARCHAR(255)
+    + amount: DECIMAL(18,2)
+    + currency: CHAR(3)
+    + fee: DECIMAL(18,2)
+    + net_amount: DECIMAL(18,2)
+    + campaign_reference: VARCHAR(255)
+    + status: VARCHAR(50)
+    + imported_at: TIMESTAMP
+    + processed: BOOLEAN
+}
+
+' ==================== SUPPORTING TABLES ====================
+class User <<Entity>> {
+    + user_id: UUID (PK)
+    + username: VARCHAR(100)
+    + email: VARCHAR(255)
+    + role: ENUM('admin', 'operator', 'viewer')
+    + created_at: TIMESTAMP
+    + last_login: TIMESTAMP
+    + is_active: BOOLEAN
+}
+
+class Currency <<Lookup>> {
+    + currency_code: CHAR(3) (PK)
+    + currency_name: VARCHAR(100)
+    + symbol: VARCHAR(5)
+    + is_crypto: BOOLEAN
+    + decimal_places: INTEGER
+}
+
+class ExchangeRateProvider <<Lookup>> {
+    + provider_id: UUID (PK)
+    + provider_name: VARCHAR(100) ['Stripe', 'Simplex', 'Binance', 'Coinbase']
+    + api_endpoint: VARCHAR(500)
+    + api_key_required: BOOLEAN
+    + is_active: BOOLEAN
+    + update_frequency_minutes: INTEGER
+}
+
+class SystemConfig <<Lookup>> {
+    + config_key: VARCHAR(100) (PK)
+    + config_value: TEXT
+    + config_type: VARCHAR(50) ['string', 'number', 'boolean', 'json']
+    + description: TEXT
+    + updated_at: TIMESTAMP
+    + updated_by: UUID (FK > User.user_id)
+}
+
+' ==================== AUDIT TABLES ====================
+class AuditLog <<Audit>> {
+    + log_id: UUID (PK)
+    + user_id: UUID (FK > User.user_id)
+    + action: VARCHAR(100)
+    + entity_type: VARCHAR(50)
+    + entity_id: VARCHAR(255)
+    + old_values: JSONB
+    + new_values: JSONB
+    + ip_address: VARCHAR(45)
+    + user_agent: TEXT
+    + created_at: TIMESTAMP
+}
+
+class ErrorLog <<Audit>> {
+    + error_id: UUID (PK)
+    + error_code: VARCHAR(50)
+    + error_message: TEXT
+    + stack_trace: TEXT
+    + module: VARCHAR(100)
+    + severity: ENUM('info', 'warning', 'error', 'critical')
+    + resolved: BOOLEAN
+    + created_at: TIMESTAMP
+}
+
+' ==================== RELATIONSHIPS ====================
+Campaign "1" -- "*" Donation : receives
+Campaign "1" -- "*" TransactionBatch : processes
+Donation "1" -- "0..1" BlockchainTransaction : converted_to
+TransactionBatch "1" -- "*" BlockchainTransaction : contains
+User "1" -- "*" Campaign : creates
+User "1" -- "*" TransactionBatch : initiates
+User "1" -- "*" WhatsAppScanJob : triggers
+WhatsAppScanJob "1" -- "*" WhatsAppChat : scans
+WhyDonatePayout "1" -- "0..1" Campaign : references
+CurrencyExchange ||--o{ Donation : applies_to
+Currency "1" -- "*" CurrencyExchange : used_in
+ExchangeRateProvider "1" -- "*" CurrencyExchange : provides
+
+' Additional relationships
+Campaign "0..1" -- "*" WhatsAppChat : mentioned_in
+SystemConfig ||--o{ User : updated_by
+User "1" -- "*" AuditLog : performs
+User "1" -- "*" ErrorLog : may_cause
+
+' Notes for clarification
+note top of Campaign
+  Sources:
+  1. WhatsApp (auto-extracted)
+  2. WhyDonate (auto-created)
+  3. Manual (admin created)
+end note
+
+note top of Donation
+  Conversion process:
+  1. Original amount in source currency
+  2. Converted to EUR using Stripe rates
+  3. Eventually converted to USDT
+end note
+
+note top of TransactionBatch
+  Delivery process:
+  1. Batch EUR donations
+  2. Convert to USDT via Simplex
+  3. Send to TRON wallet
+  4. Admin manually triggers
+end note
+
+@enduml

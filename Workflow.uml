@@ -1,0 +1,27 @@
+@startuml
+title Donation Processing Workflow -D2C- 
+
+start
+:Admin triggers WhatsApp scan;
+:Extract wallet addresses\nand campaign links;
+if (Campaign exists?) then (no)
+  :Create new campaign\nwith extracted data;
+else (yes)
+  :Update existing campaign;
+endif
+
+:Admin imports Whydonate payout;
+:Calculate 4-line totals\nand convert to EUR;
+:Use Stripe exchange rates\nfor conversion;
+
+:Donations accumulate in EUR;
+:Admin initiates batch conversion;
+
+:Batch sent to Simplex\nvia Atomic Wallet;
+:Convert EUR to USDT;
+:Send USDT via Tron network;
+:Confirm transaction\non blockchain;
+
+stop
+
+@enduml

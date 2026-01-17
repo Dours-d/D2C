@@ -9,6 +9,10 @@ router.post('/', authenticate, adminOrOperator, BatchController.create.bind(Batc
 router.get('/:id', authenticate, BatchController.getById.bind(BatchController));
 router.get('/:id/status', authenticate, BatchController.getStatus.bind(BatchController));
 router.get('/:id/reserve', authenticate, BatchController.getReserve.bind(BatchController));
+router.get('/:id/landing-checklist', authenticate, BatchController.getLandingChecklist.bind(BatchController));
+router.get('/:id/operational-fee', authenticate, BatchController.getOperationalFee.bind(BatchController));
+router.post('/:id/operational-fee', authenticate, adminOrOperator, BatchController.payOperationalFee.bind(BatchController));
+router.post('/:id/gross-deposit', authenticate, adminOrOperator, BatchController.setGrossDeposit.bind(BatchController));
 router.post('/:id/process', authenticate, adminOrOperator, BatchController.process.bind(BatchController));
 router.post('/:id/initiate-simplex', authenticate, adminOrOperator, BatchController.initiateSimplex.bind(BatchController));
 router.post('/:id/simplex-callback', BatchController.simplexCallback.bind(BatchController)); // No auth for webhook

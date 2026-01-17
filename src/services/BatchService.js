@@ -105,6 +105,11 @@ class BatchService {
       throw new Error(`Batch cannot be processed from status: ${batch.status}`);
     }
 
+    const metadata = batch.metadata || {};
+    if (!metadata.grossDepositEur) {
+      throw new Error('Gross deposit must be set before processing batch');
+    }
+
     // Get EUR to USDT rate
     const rateInfo = await ExchangeRateService.getExchangeRate('EUR', 'USDT');
 
@@ -112,10 +117,14 @@ class BatchService {
     const usdtAmount = batch.totalNetEur * rateInfo.rate;
 
     const reserve = this.getSimplexReserve(batch.totalNetEur);
-    const metadata = batch.metadata || {};
+    const operationalStatus = this.buildOperationalFeeStatus(batch, metadata);
     metadata.simplexMinEur = reserve.minimumEur;
     metadata.simplexReserveEur = reserve.reserveRequiredEur;
     metadata.simplexEligible = reserve.reserveRequiredEur === 0;
+    metadata.operationalFeeGrossDepositEur = operationalStatus.baseGrossEur;
+    metadata.operationalFeeCurrentEur = operationalStatus.currentEur;
+    metadata.operationalFeePaidEur = operationalStatus.paidEur;
+    metadata.operationalFeeDueEur = operationalStatus.dueEur;
 
     // Update batch
     await batch.update({
@@ -146,6 +155,80 @@ class BatchService {
     return Math.round(value * Math.pow(10, decimals)) / Math.pow(10, decimals);
   }
 
+  buildOperationalFeeStatus(batch, metadata = {}) {
+    const baseGrossEur = parseFloat(
+      metadata.grossDepositEur || batch.totalNetEur || 0
+    );
+    const currentEur = this.roundDecimal(baseGrossEur * 0.1, 2);
+    const paidEur = this.roundDecimal(parseFloat(metadata.operationalFeePaidEur || 0), 2);
+    const dueEur = this.roundDecimal(Math.max(currentEur - paidEur, 0), 2);
+
+    return {
+      baseGrossEur: this.roundDecimal(baseGrossEur, 2),
+      currentEur,
+      paidEur,
+      dueEur
+    };
+  }
+
+  async getOperationalFeeStatus(batchId) {
+    const batch = await models.TransactionBatch.findByPk(batchId);
+
+    if (!batch) {
+      throw new Error('Batch not found');
+    }
+
+    const metadata = batch.metadata || {};
+    const status = this.buildOperationalFeeStatus(batch, metadata);
+
+    return {
+      batchId: batch.batchId,
+      baseGrossEur: status.baseGrossEur,
+      currentEur: status.currentEur,
+      paidEur: status.paidEur,
+      dueEur: status.dueEur
+    };
+  }
+
+  async recordOperationalFeePayment(batchId, amountEur, note = null) {
+    const batch = await models.TransactionBatch.findByPk(batchId);
+
+    if (!batch) {
+      throw new Error('Batch not found');
+    }
+
+    const amount = this.roundDecimal(parseFloat(amountEur || 0), 2);
+    if (amount <= 0) {
+      throw new Error('Payment amount must be greater than 0');
+    }
+
+    const metadata = batch.metadata || {};
+    const currentPaid = this.roundDecimal(parseFloat(metadata.operationalFeePaidEur || 0), 2);
+    const newPaid = this.roundDecimal(currentPaid + amount, 2);
+
+    const status = this.buildOperationalFeeStatus(batch, {
+      ...metadata,
+      operationalFeePaidEur: newPaid
+    });
+
+    metadata.operationalFeePaidEur = status.paidEur;
+    metadata.operationalFeeDueEur = status.dueEur;
+    metadata.operationalFeeCurrentEur = status.currentEur;
+    metadata.operationalFeeGrossDepositEur = status.baseGrossEur;
+    metadata.operationalFeeLastPaidAt = new Date().toISOString();
+    metadata.operationalFeeLastPaymentEur = amount;
+    if (note) {
+      metadata.operationalFeeLastNote = note;
+    }
+
+    await batch.update({ metadata });
+
+    return {
+      batchId: batch.batchId,
+      ...status
+    };
+  }
+
   async getBatchReserve(batchId) {
     const batch = await models.TransactionBatch.findByPk(batchId);
 
@@ -161,6 +244,128 @@ class BatchService {
       minimumEur: reserve.minimumEur,
       reserveRequiredEur: reserve.reserveRequiredEur,
       eligible: reserve.reserveRequiredEur === 0
+    };
+  }
+
+  async getLandingChecklist(batchId) {
+    const batch = await models.TransactionBatch.findByPk(batchId);
+
+    if (!batch) {
+      throw new Error('Batch not found');
+    }
+
+    const metadata = batch.metadata || {};
+    const reserve = this.getSimplexReserve(batch.totalNetEur);
+    const operational = this.buildOperationalFeeStatus(batch, metadata);
+
+    const grossDepositSet = parseFloat(metadata.grossDepositEur || 0) > 0;
+    const operationalPaid = operational.currentEur > 0 && operational.dueEur === 0;
+    const processedStatuses = ['processing', 'awaiting_simplex', 'simplex_processing', 'sending', 'completed'];
+    const simplexInitiatedStatuses = ['awaiting_simplex', 'simplex_processing', 'sending', 'completed'];
+    const isProcessed = processedStatuses.includes(batch.status);
+    const simplexInitiated = Boolean(metadata.simplexRequestId || metadata.simplexQuoteId) || simplexInitiatedStatuses.includes(batch.status);
+    const tronSent = Boolean(batch.transactionHash) || ['sending', 'completed'].includes(batch.status);
+
+    return {
+      batchId: batch.batchId,
+      status: batch.status,
+      metrics: {
+        grossDepositEur: this.roundDecimal(parseFloat(metadata.grossDepositEur || 0), 2),
+        totalNetEur: this.roundDecimal(parseFloat(batch.totalNetEur || 0), 2),
+        simplexMinimumEur: reserve.minimumEur,
+        simplexReserveRequiredEur: reserve.reserveRequiredEur,
+        operationalFeeCurrentEur: operational.currentEur,
+        operationalFeePaidEur: operational.paidEur,
+        operationalFeeDueEur: operational.dueEur
+      },
+      steps: [
+        {
+          key: 'gross_deposit_set',
+          label: 'Gross deposit recorded',
+          done: grossDepositSet,
+          value: this.roundDecimal(parseFloat(metadata.grossDepositEur || 0), 2)
+        },
+        {
+          key: 'operational_fee_computed',
+          label: 'Operational fee computed (10% of gross)',
+          done: grossDepositSet && operational.currentEur > 0,
+          value: operational.currentEur
+        },
+        {
+          key: 'operational_fee_paid',
+          label: 'Operational fee marked as paid',
+          done: operationalPaid,
+          value: {
+            paidEur: operational.paidEur,
+            dueEur: operational.dueEur
+          }
+        },
+        {
+          key: 'batch_processed',
+          label: 'Batch processed',
+          done: isProcessed
+        },
+        {
+          key: 'simplex_eligible',
+          label: 'Eligible for Simplex minimum',
+          done: reserve.reserveRequiredEur === 0,
+          value: reserve.reserveRequiredEur
+        },
+        {
+          key: 'simplex_initiated',
+          label: 'Simplex purchase initiated',
+          done: simplexInitiated
+        },
+        {
+          key: 'tron_sent',
+          label: 'TRON transfer sent',
+          done: tronSent
+        },
+        {
+          key: 'batch_completed',
+          label: 'Batch completed',
+          done: batch.status === 'completed'
+        }
+      ]
+    };
+  }
+
+  async setGrossDeposit(batchId, grossDepositEur, note = null) {
+    const batch = await models.TransactionBatch.findByPk(batchId);
+
+    if (!batch) {
+      throw new Error('Batch not found');
+    }
+
+    const gross = this.roundDecimal(parseFloat(grossDepositEur || 0), 2);
+    if (gross <= 0) {
+      throw new Error('Gross deposit must be greater than 0');
+    }
+
+    const metadata = batch.metadata || {};
+    metadata.grossDepositEur = gross;
+    metadata.operationalFeeGrossDepositEur = gross;
+    metadata.operationalFeeWithheldEur = this.roundDecimal(gross * 0.1, 2);
+    if (note) {
+      metadata.grossDepositNote = note;
+    }
+
+    const status = this.buildOperationalFeeStatus(batch, metadata);
+    metadata.operationalFeeCurrentEur = status.currentEur;
+    metadata.operationalFeeDueEur = status.dueEur;
+
+    await batch.update({ metadata });
+
+    return {
+      batchId: batch.batchId,
+      grossDepositEur: gross,
+      operationalFeeWithheldEur: metadata.operationalFeeWithheldEur,
+      operationalFee: {
+        baseGrossEur: status.baseGrossEur,
+        currentEur: status.currentEur,
+        paidEur: status.paidEur,
+        dueEur: status.dueEur
+      }
     };
   }
 

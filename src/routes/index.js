@@ -10,6 +10,7 @@ const batchRoutes = require('./batches');
 const exchangeRoutes = require('./exchange');
 const feeRoutes = require('./fees');
 const adminRoutes = require('./admin');
+const cycleRoutes = require('./cycles');
 
 router.use('/auth', authRoutes);
 router.use('/campaigns', campaignRoutes);
@@ -21,5 +22,6 @@ router.use('/currencies', exchangeRoutes);
 router.use('/exchange-rates', exchangeRoutes);
 router.use('/fees', feeRoutes);
 router.use('/admin', adminRoutes);
+router.use('/cycles', cycleRoutes);
 
 module.exports = router;

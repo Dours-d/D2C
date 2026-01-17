@@ -1,5 +1,6 @@
 const models = require('../database/models');
 const WhatsAppService = require('../services/WhatsAppService');
+const WhatsAppQueryService = require('../services/WhatsAppQueryService');
 
 /**
  * WhatsApp Controller
@@ -295,6 +296,120 @@ class WhatsAppController {
     } catch (error) {
       console.error('Send message error:', error);
       res.status(500).json({ error: `Failed to send message: ${error.message}` });
+    }
+  }
+
+  /**
+   * Parse exported WhatsApp chat file
+   * POST /api/whatsapp/parse-exported
+   */
+  async parseExported(req, res) {
+    try {
+      const { filePath, phoneNumber } = req.body;
+
+      if (!filePath) {
+        return res.status(400).json({ error: 'File path is required' });
+      }
+
+      const messages = await WhatsAppQueryService.parseExportedFile(filePath, phoneNumber);
+
+      res.json({
+        success: true,
+        messages,
+        count: messages.length
+      });
+    } catch (error) {
+      console.error('Parse exported file error:', error);
+      res.status(500).json({ error: `Failed to parse file: ${error.message}` });
+    }
+  }
+
+  /**
+   * Query messages from exported JSON
+   * POST /api/whatsapp/query
+   */
+  async queryMessages(req, res) {
+    try {
+      const { jsonPath, query = {} } = req.body;
+
+      if (!jsonPath) {
+        return res.status(400).json({ error: 'JSON path is required' });
+      }
+
+      const messages = await WhatsAppQueryService.queryMessages(jsonPath, query);
+
+      res.json({
+        success: true,
+        messages,
+        count: messages.length
+      });
+    } catch (error) {
+      console.error('Query messages error:', error);
+      res.status(500).json({ error: `Failed to query messages: ${error.message}` });
+    }
+  }
+
+  /**
+   * Extract donations from exported file
+   * POST /api/whatsapp/extract-donations-file
+   */
+  async extractDonationsFromFile(req, res) {
+    try {
+      const { filePath, phoneNumber, storeInDatabase, campaignId } = req.body;
+
+      if (!filePath) {
+        return res.status(400).json({ error: 'File path is required' });
+      }
+
+      const donations = await WhatsAppQueryService.extractDonationsFromFile(filePath, {
+        phoneNumber,
+        storeInDatabase: storeInDatabase === true,
+        campaignId
+      });
+
+      res.json({
+        success: true,
+        donations,
+        count: donations.length,
+        storedInDatabase: storeInDatabase === true
+      });
+    } catch (error) {
+      console.error('Extract donations from file error:', error);
+      res.status(500).json({ error: `Failed to extract donations: ${error.message}` });
+    }
+  }
+
+  /**
+   * Process WhatsApp database file
+   * POST /api/whatsapp/process-database
+   */
+  async processDatabase(req, res) {
+    try {
+      const { dbPath, platform, keyFile, mediaDir, phoneNumber, startDate, endDate, storeInDatabase, campaignId } = req.body;
+
+      if (!dbPath) {
+        return res.status(400).json({ error: 'Database path is required' });
+      }
+
+      const result = await WhatsAppQueryService.processDatabase(dbPath, {
+        platform: platform || 'android',
+        keyFile,
+        mediaDir,
+        phoneNumber,
+        startDate,
+        endDate,
+        storeInDatabase: storeInDatabase === true,
+        campaignId,
+        outputDir: req.body.outputDir
+      });
+
+      res.json({
+        success: true,
+        ...result
+      });
+    } catch (error) {
+      console.error('Process database error:', error);
+      res.status(500).json({ error: `Failed to process database: ${error.message}` });
     }
   }
 }

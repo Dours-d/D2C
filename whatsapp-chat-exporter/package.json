@@ -1,0 +1,26 @@
+{
+  "name": "@d2c/whatsapp-chat-exporter",
+  "version": "1.0.0",
+  "description": "WhatsApp chat query module for D2C platform - integrates with Python whatsapp-chat-exporter",
+  "main": "index.js",
+  "scripts": {
+    "test": "node tests/test.js"
+  },
+  "keywords": [
+    "whatsapp",
+    "chat",
+    "exporter",
+    "parser",
+    "query"
+  ],
+  "author": "D2C Platform",
+  "license": "MIT",
+  "dependencies": {
+    "sqlite3": "^5.1.6",
+    "csv-parse": "^5.5.2",
+    "moment": "^2.29.4"
+  },
+  "devDependencies": {
+    "jest": "^29.6.2"
+  }
+}

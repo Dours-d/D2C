@@ -1,0 +1,39 @@
+project_name: "Donation Platform"
+description: "Multi-source donation management with 25% fee allocation and TRON blockchain integration"
+stack: "Node.js, PostgreSQL, Next.js, TRON"
+
+rules:
+  coding_style:
+    backend: "ES6+ with async/await, proper error handling"
+    frontend: "React with hooks, Tailwind CSS"
+    database: "PostgreSQL with proper indexes and constraints"
+  
+  fee_structure:
+    total: "25%"
+    breakdown:
+      - "10% debt repayment"
+      - "10% operational costs"
+      - "5% transaction fees"
+  
+  blockchain:
+    network: "TRON mainnet"
+    token: "USDT (TRC20)"
+    wallet: "Atomic Wallet compatible"
+  
+  integrations:
+    - "WhatsApp message scanning"
+    - "WhyDonate CSV import"
+    - "Stripe exchange rates"
+    - "Simplex USDT purchase"
+  
+  security:
+    - "JWT authentication"
+    - "Rate limiting"
+    - "SQL injection prevention"
+    - "API key encryption"
+  
+  priorities:
+    - "Complete fee calculation logic"
+    - "WhatsApp number as primary identifier"
+    - "Manual admin triggers for critical operations"
+    - "Comprehensive audit logging"

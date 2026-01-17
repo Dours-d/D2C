@@ -1,6 +1,8 @@
 const models = require('../database/models');
 const FeeCalculator = require('./FeeCalculator');
 const ExchangeRateService = require('./ExchangeRateService');
+const config = require('../config');
+const { Op } = require('sequelize');
 
 /**
  * Batch Processing Service
@@ -24,7 +26,6 @@ class BatchService {
     }
 
     // Get donations
-    const { Op } = require('sequelize');
     const donations = await models.Donation.findAll({
       where: {
         donationId: {
@@ -67,7 +68,6 @@ class BatchService {
     );
 
     // Update donation statuses
-    const { Op } = require('sequelize');
     await models.Donation.update(
       { status: 'batched' },
       { where: { donationId: { [Op.in]: donationIds } } }
@@ -111,15 +111,105 @@ class BatchService {
     // Calculate USDT amount
     const usdtAmount = batch.totalNetEur * rateInfo.rate;
 
+    const reserve = this.getSimplexReserve(batch.totalNetEur);
+    const metadata = batch.metadata || {};
+    metadata.simplexMinEur = reserve.minimumEur;
+    metadata.simplexReserveEur = reserve.reserveRequiredEur;
+    metadata.simplexEligible = reserve.reserveRequiredEur === 0;
+
     // Update batch
     await batch.update({
       status: 'processing',
       targetUsdtAmount: usdtAmount,
       eurToUsdtRate: rateInfo.rate,
-      initiatedAt: new Date()
+      initiatedAt: new Date(),
+      metadata
     });
 
     return batch;
+  }
+
+  getSimplexReserve(totalNetEur) {
+    const minimum = Number.isFinite(config.simplex.minPurchaseEur)
+      ? config.simplex.minPurchaseEur
+      : 44;
+    const total = parseFloat(totalNetEur || 0);
+    const reserveRequired = total >= minimum ? 0 : this.roundDecimal(minimum - total, 2);
+
+    return {
+      minimumEur: minimum,
+      reserveRequiredEur: reserveRequired
+    };
+  }
+
+  roundDecimal(value, decimals = 2) {
+    return Math.round(value * Math.pow(10, decimals)) / Math.pow(10, decimals);
+  }
+
+  async getBatchReserve(batchId) {
+    const batch = await models.TransactionBatch.findByPk(batchId);
+
+    if (!batch) {
+      throw new Error('Batch not found');
+    }
+
+    const reserve = this.getSimplexReserve(batch.totalNetEur);
+
+    return {
+      batchId: batch.batchId,
+      totalNetEur: parseFloat(batch.totalNetEur || 0),
+      minimumEur: reserve.minimumEur,
+      reserveRequiredEur: reserve.reserveRequiredEur,
+      eligible: reserve.reserveRequiredEur === 0
+    };
+  }
+
+  async getReserveSummary(dateString) {
+    const { start, end, label } = this.resolveDateRange(dateString);
+
+    const batches = await models.TransactionBatch.findAll({
+      where: {
+        initiatedAt: {
+          [Op.gte]: start,
+          [Op.lt]: end
+        }
+      }
+    });
+
+    let totalReserve = 0;
+    let belowMinimumCount = 0;
+
+    batches.forEach((batch) => {
+      const reserve = this.getSimplexReserve(batch.totalNetEur);
+      totalReserve += reserve.reserveRequiredEur;
+      if (reserve.reserveRequiredEur > 0) {
+        belowMinimumCount += 1;
+      }
+    });
+
+    return {
+      date: label,
+      batchCount: batches.length,
+      belowMinimumCount,
+      minimumEur: this.getSimplexReserve(0).minimumEur,
+      totalReserveEur: this.roundDecimal(totalReserve, 2)
+    };
+  }
+
+  resolveDateRange(dateString) {
+    const base = dateString ? new Date(dateString) : new Date();
+    if (Number.isNaN(base.getTime())) {
+      throw new Error('Invalid date format. Use YYYY-MM-DD');
+    }
+
+    const start = new Date(base);
+    start.setHours(0, 0, 0, 0);
+    const end = new Date(start);
+    end.setDate(end.getDate() + 1);
+
+    const label = start.toISOString().slice(0, 10);
+
+    return { start, end, label };
   }
 
   /**

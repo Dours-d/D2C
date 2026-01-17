@@ -1,35 +1,50 @@
+const logger = require('../utils/logger');
+
 /**
  * Fee Calculator Service
  * Calculates 25% fee breakdown: 10% debt, 10% operational, 5% transaction
  */
 class FeeCalculator {
+  constructor() {
+    this.feeStructure = {
+      total: 0.25,
+      debt: 0.1,
+      operational: 0.1,
+      transaction: 0.05
+    };
+  }
+
   /**
    * Calculate fees for a donation amount
    * @param {number} amount - Amount in EUR
-   * @param {number} debtPercent - Debt fee percentage (default: 10)
-   * @param {number} operationalPercent - Operational fee percentage (default: 10)
-   * @param {number} transactionPercent - Transaction fee percentage (default: 5)
    * @returns {Object} Fee breakdown object
    */
-  calculateFees(amount, debtPercent = 10, operationalPercent = 10, transactionPercent = 5) {
-    if (amount <= 0) {
+  calculateFees(amount) {
+    if (!amount || amount <= 0) {
       throw new Error('Amount must be greater than 0');
     }
 
-    const totalFeePercent = debtPercent + operationalPercent + transactionPercent;
-    
-    const debtFeeAmount = this.roundDecimal((amount * debtPercent) / 100, 8);
-    const operationalFeeAmount = this.roundDecimal((amount * operationalPercent) / 100, 8);
-    const transactionFeeAmount = this.roundDecimal((amount * transactionPercent) / 100, 8);
-    const totalFeeAmount = debtFeeAmount + operationalFeeAmount + transactionFeeAmount;
+    const debtFeeAmount = this.roundDecimal(amount * this.feeStructure.debt, 8);
+    const operationalFeeAmount = this.roundDecimal(amount * this.feeStructure.operational, 8);
+    const transactionFeeAmount = this.roundDecimal(amount * this.feeStructure.transaction, 8);
+    const totalFeeAmount = this.roundDecimal(
+      debtFeeAmount + operationalFeeAmount + transactionFeeAmount,
+      8
+    );
     const netAmount = this.roundDecimal(amount - totalFeeAmount, 8);
+
+    logger.debug('Calculated fees', {
+      amount,
+      totalFeeAmount,
+      netAmount
+    });
 
     return {
       grossAmount: amount,
-      totalFeePercent,
-      debtFeePercent: debtPercent,
-      operationalFeePercent: operationalPercent,
-      transactionFeePercent: transactionPercent,
+      totalFeePercent: this.feeStructure.total * 100,
+      debtFeePercent: this.feeStructure.debt * 100,
+      operationalFeePercent: this.feeStructure.operational * 100,
+      transactionFeePercent: this.feeStructure.transaction * 100,
       debtFeeAmount,
       operationalFeeAmount,
       transactionFeeAmount,
@@ -54,7 +69,7 @@ class FeeCalculator {
     let totalTransactionFee = 0;
     let totalNet = 0;
 
-    donations.forEach(donation => {
+    donations.forEach((donation) => {
       const euroAmount = parseFloat(donation.euroAmount || donation.euro_amount || 0);
       totalGross += euroAmount;
       totalDebtFee += parseFloat(donation.debtFeeAmount || donation.debt_fee_amount || 0);
@@ -82,18 +97,6 @@ class FeeCalculator {
    */
   roundDecimal(value, decimals = 8) {
     return Math.round(value * Math.pow(10, decimals)) / Math.pow(10, decimals);
-  }
-
-  /**
-   * Validate fee percentages
-   * @param {number} debtPercent - Debt fee percentage
-   * @param {number} operationalPercent - Operational fee percentage
-   * @param {number} transactionPercent - Transaction fee percentage
-   * @returns {boolean} True if valid
-   */
-  validateFeePercentages(debtPercent, operationalPercent, transactionPercent) {
-    const total = debtPercent + operationalPercent + transactionPercent;
-    return total >= 0 && total <= 100;
   }
 }
 

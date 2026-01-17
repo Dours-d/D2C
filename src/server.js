@@ -9,6 +9,13 @@ const config = require('./config');
  */
 async function startServer() {
   try {
+    const { errors, warnings } = config.validateConfig();
+    warnings.forEach((warning) => logger.warn(warning));
+    if (errors.length > 0) {
+      errors.forEach((message) => logger.error(message));
+      throw new Error('Configuration validation failed');
+    }
+
     // Test database connection
     await models.sequelize.authenticate();
     logger.info('Database connection established');

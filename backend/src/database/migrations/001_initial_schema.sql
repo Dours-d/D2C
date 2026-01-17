@@ -1,0 +1,2 @@
+-- Initial schema setup
+-- See core.sql for the full schema definition.

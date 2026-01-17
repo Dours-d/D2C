@@ -1,0 +1,7 @@
+{
+  "name": "d2c-blockchain",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Smart contracts for the D2C platform",
+  "scripts": {}
+}

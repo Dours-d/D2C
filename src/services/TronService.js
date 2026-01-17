@@ -8,7 +8,7 @@ class TronService {
   constructor() {
     this.network = process.env.TRON_NETWORK || 'mainnet';
     this.privateKey = process.env.TRON_PRIVATE_KEY;
-    this.usdtContract = process.env.USDT_TRC20_CONTRACT || 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t';
+    this.usdtContract = process.env.TRON_USDT_CONTRACT || process.env.USDT_TRC20_CONTRACT || 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t';
 
     // Initialize TronWeb
     if (this.network === 'mainnet') {

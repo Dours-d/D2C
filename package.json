@@ -2,10 +2,10 @@
   "name": "d2c-donation-platform",
   "version": "1.0.0",
   "description": "Donation management platform with WhatsApp integration, fee processing, and TRON blockchain support",
-  "main": "src/server.js",
+  "main": "backend/src/server.js",
   "scripts": {
-    "start": "node src/server.js",
-    "dev": "nodemon src/server.js",
+    "start": "node backend/src/server.js",
+    "dev": "nodemon backend/src/server.js",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage"

@@ -78,6 +78,44 @@ class BatchController {
   }
 
   /**
+   * Get batch reserve details
+   * GET /api/batches/:id/reserve
+   */
+  async getReserve(req, res) {
+    try {
+      const { id } = req.params;
+      const reserve = await BatchService.getBatchReserve(id);
+
+      res.json({
+        success: true,
+        reserve
+      });
+    } catch (error) {
+      console.error('Get batch reserve error:', error);
+      res.status(500).json({ error: `Failed to get batch reserve: ${error.message}` });
+    }
+  }
+
+  /**
+   * Get daily reserve summary
+   * GET /api/batches/reserve-summary?date=YYYY-MM-DD
+   */
+  async getReserveSummary(req, res) {
+    try {
+      const { date } = req.query;
+      const summary = await BatchService.getReserveSummary(date);
+
+      res.json({
+        success: true,
+        summary
+      });
+    } catch (error) {
+      console.error('Get reserve summary error:', error);
+      res.status(500).json({ error: `Failed to get reserve summary: ${error.message}` });
+    }
+  }
+
+  /**
    * Process batch
    * POST /api/batches/:id/process
    */
@@ -110,6 +148,16 @@ class BatchController {
         firstName: req.user.username,
         lastName: 'User'
       };
+
+      const batch = await BatchService.getBatchDetails(id);
+      const reserve = BatchService.getSimplexReserve(batch.totalNetEur);
+      if (reserve.reserveRequiredEur > 0) {
+        return res.status(400).json({
+          error: 'Batch total below Simplex minimum purchase amount',
+          minimumEur: reserve.minimumEur,
+          reserveRequiredEur: reserve.reserveRequiredEur
+        });
+      }
 
       const result = await SimplexService.initiatePayment(id, userData);
 

@@ -1,0 +1,7 @@
+{
+  "name": "d2c-frontend",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Frontend for the D2C donation platform",
+  "scripts": {}
+}

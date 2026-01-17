@@ -9,7 +9,7 @@ class SimplexService {
   constructor() {
     this.apiUrl = process.env.SIMPLEX_API_URL || 'https://sandbox.test-simplex.com';
     this.apiKey = process.env.SIMPLEX_API_KEY;
-    this.appId = process.env.SIMPLEX_APP_ID;
+    this.appId = process.env.SIMPLEX_APP_PROVIDER_ID || process.env.SIMPLEX_APP_ID;
   }
 
   /**

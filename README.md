@@ -43,6 +43,7 @@ npm install
 3. Set up environment variables:
 ```bash
 cp .env.example .env
+# For the backend-specific env template, see backend/.env.example
 # Edit .env with your configuration
 ```
 
@@ -139,21 +140,18 @@ See `.env.example` for all required environment variables. Key variables:
 
 ```
 D2C/
-├── src/
-│   ├── config/          # Configuration files
-│   ├── controllers/     # Route controllers
-│   ├── database/        # Database models and config
-│   ├── jobs/            # Background job workers
-│   ├── middleware/      # Express middleware
-│   ├── routes/          # API routes
-│   ├── services/        # Business logic services
-│   ├── utils/           # Utility functions
-│   ├── app.js           # Express app setup
-│   └── server.js        # Server entry point
-├── tests/               # Test files
+├── backend/
+│   ├── src/             # Backend app logic (wrappers for existing src)
+│   ├── public/          # API docs and templates
+│   └── docs/            # Backend documentation
+├── frontend/            # Next.js frontend scaffold
+├── blockchain/          # Smart contract scaffolding
+├── docker/              # Container definitions
+├── monitoring/          # Observability placeholders
+├── src/                 # Existing backend implementation
 ├── core.sql             # Database schema
 ├── endpoints.js         # API endpoint structure
-└── package.json        # Dependencies
+└── package.json         # Root scripts
 ```
 
 ## Development
